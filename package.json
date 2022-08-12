@@ -1,0 +1,29 @@
+{
+  "name": "bulk-compressor",
+  "version": "1.0.0",
+  "description": "bulk file compressor",
+  "main": "index.js",
+  "directories": {
+	"test": "test"
+  },
+  "scripts": {
+	"test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+	"type": "git",
+	"url": "git+https://github.com/AokiAreAoki/bulk-compressor.git"
+  },
+  "keywords": [
+	"aoki",
+	"bulk",
+	"file",
+	"compressor",
+	"optimizer"
+  ],
+  "author": "Aoki",
+  "license": "ISC",
+  "bugs": {
+	"url": "https://github.com/AokiAreAoki/bulk-compressor/issues"
+  },
+  "homepage": "https://github.com/AokiAreAoki/bulk-compressor#readme"
+}
