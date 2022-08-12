@@ -117,12 +117,10 @@ class File {
 
 		if( file.isDir ){
 			let content = fs.readdirSync( file.path )
-				.map( subfile => join( file.path, subfile ) )
+				.map( subfile => File.new( join( file.path, subfile ) ) )
 
 			if( rflag )
 				content.forEach( dir => {
-					dir = File.new( dir )
-					
 					if( dir.isDir )
 						files.push( '-r' )
 					
