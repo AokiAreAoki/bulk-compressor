@@ -39,7 +39,7 @@ Compresses the `<file>` and all files in the `<directory>`
 ```bash
 node . -r <directory>
 ```
-Compresses all files in the `<directory>` and subdirectories 
+Compresses all files in the `<directory>` and it's subdirectories 
 
 ```bash
 node . <file1> <file2> <directory1> -r <directory2>
