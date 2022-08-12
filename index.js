@@ -15,6 +15,21 @@ function renameAsync( oldPath, newPath ){
 	})
 }
 
+function utimesAsync( file ){
+	return new Promise( ( resolve, reject ) => {
+		fs.utimes( file.path, file.stat.atime, file.stat.mtime, err => {
+			if( err )
+				reject( err )
+			else
+				resolve()
+		})
+	})
+}
+
+function isNiceName( filename ){
+	return /[^\.\/\\]\.\w+$/.test( filename )
+}
+
 function getExtention( filename ){
 	let start = filename.length
 
@@ -37,51 +52,86 @@ try {
 let files = process.argv.slice(2).map( path => path.replace( /\\/g, '/' ) )
 const unaccessedFiles = []
 const errors = []
-const cpsInWork = []
 const MAX_CP = 5
+let cpsInWork = []
 
 let successed = 0
 let justInCaseInterval
 let progressDisplayInterval
 
 console.clear()
-log( `Validating files' existence...` )
+log( `Validating files existence...` )
 log()
 
-{ // File checking
+class File {
+	static access = fs.constants.F_OK | fs.constants.R_OK | fs.constants.W_OK
+	static new( path ){
+		return path instanceof File
+			? path
+			: new File( path )
+	}
+	
+	constructor( path ){
+		this.path = path
+
+		try {
+			fs.accessSync( this.path, File.access )
+			this.stat = fs.statSync( this.path )
+		} catch( err ){
+			this.unaccessable = true
+			return
+		}
+		
+		
+		if( this.stat.isDirectory() )
+			this.isDir = true
+	}
+
+	async renameAsync( newPath ){
+		await renameAsync( this.path, newPath )
+		this.path = newPath
+	}
+}
+
+{ // Fetching files
 	let rflag = false
 	const onlyFiles = []
 
 	for( let i = 0; i < files.length; ++i ){
 		const path = files[i]
 
-		if( path.toLowerCase() === '-r' ){
+		if( typeof path === 'string' && path.toLowerCase() === '-r' ){
 			rflag = true
 			continue
 		}
 		
-		try {
-			fs.accessSync( path, fs.constants.F_OK | fs.constants.R_OK | fs.constants.W_OK )
-		} catch( err ){
-			unaccessedFiles.push( path )
+		const file = File.new( path )
+		
+		if( !file.isDir && !isNiceName( file.path ) )
+			continue
+
+		if( file.unaccessable ){
+			unaccessedFiles.push( file )
 			continue
 		}
 
-		if( fs.statSync( path ).isDirectory() ){
-			let content = fs.readdirSync( path )
-				.map( subfile => join( path, subfile ) )
+		if( file.isDir ){
+			let content = fs.readdirSync( file.path )
+				.map( subfile => join( file.path, subfile ) )
 
 			if( rflag )
 				content.forEach( dir => {
-					if( fs.statSync( dir ).isDirectory() )
+					dir = File.new( dir )
+					
+					if( dir.isDir )
 						files.push( '-r' )
 					
 					files.push( dir )
 				})
 			else
-				files.push( ...content.filter( file => fs.statSync( file ).isFile() ) )
+				files.push( ...content.filter( file => fs.statSync( file.path ).isFile() ) )
 		} else {
-			const ext = getExtention( path )
+			const ext = getExtention( file.path )
 
 			if( ext && extentions.includes( ext ) ){
 				onlyFiles.push( path )
@@ -115,7 +165,7 @@ progressDisplayInterval = setInterval( () => {
 		text.push( `Errors: ${errors.length}\n` )
 		
 		const err = errors[errors.length - 1]
-		text.push( 'Last errored file: ' + err.file )
+		text.push( 'Last errored file: ' + err.file.path )
 		text.push( 'Error: ' + err.error )
 	} else
 		text.push( 'No errors' )
@@ -142,7 +192,7 @@ progressDisplayInterval = setInterval( () => {
 nextFile()
 
 async function nextFile(){
-	if( cpsInWork.length >=  MAX_CP )
+	if( cpsInWork.length >= MAX_CP )
 		return
 
 	let file = files.shift()
@@ -154,21 +204,20 @@ async function nextFile(){
 		return
 	}
 
-	const jpegNot = file.match( /\.(jpeg|png)$/i )
+	const jpegNot = file.path.match( /\.(jpeg|png)$/i )
 
 	if( jpegNot ){
-		const jpegFile = file.substring( 0, file.length - jpegNot[1].length ) + 'jpg'
+		const jpegName = file.path.substring( 0, file.path.length - jpegNot[1].length ) + 'jpg'
 		
 		try {
-			await renameAsync( file, jpegFile )
-			file = jpegFile
+			await file.renameAsync( jpegName )
 		} catch( error ){
 			return errors.push({ file, error })
 		}
 	}
 
-	const tempFile = file.replace( /([^\/\\]+$)/, 'compressed_$1' )
-	const ffmpeg = cp.exec( `ffmpeg -i "${file}" "${tempFile}" -y` )
+	const tempPath = file.path.replace( /([^\/\\]+$)/, 'compressed_$1' )
+	const ffmpeg = cp.exec( `ffmpeg -i "${file.path}" "${tempPath}" -y` )
 	cpsInWork.push( ffmpeg )
 
 	ffmpeg._stdout = ''
@@ -185,11 +234,13 @@ async function nextFile(){
 		if( code !== 0 )
 			return errors.push({ file, error: stderr || 'empty stderr :(' })
 
-		await renameAsync( tempFile, file )
-			.then( () => ++successed )
+		await renameAsync( tempPath, file.path )
+			.then( () => utimesAsync( file )
+				.then( () => ++successed )
+			)
 			.catch( error => errors.push({ file, error }) )
 
-		cpsInWork.splice( cpsInWork.findIndex( cp => cp === ffmpeg ), 1 )
+		cpsInWork = cpsInWork.filter( cp => cp !== ffmpeg )
 		setTimeout( nextFile, 123 * cpsInWork.length )
 	})
 
@@ -205,7 +256,7 @@ function finish(){
 
 	if( unaccessedFiles.length !== 0 ){
 		log( `Unaccessable files: (${unaccessedFiles.length}):` )
-		log( unaccessedFiles.map( f => ` - ${f}` ).join( '\n' ) )
+		log( unaccessedFiles.map( f => ` - ${f.path}` ).join( '\n' ) )
 		log()
 	}
 
@@ -213,7 +264,7 @@ function finish(){
 		log( `Errors (${errors.length}):` )
 
 		errors.forEach( ( err, i ) => {
-			log( `Errored file (${i + 1}/${errors.length}): "${err.file}"` )
+			log( `Errored file (${i + 1}/${errors.length}): "${err.file.path}"` )
 			log( ` - Error:` )
 			log( err.error )
 			log()
