@@ -132,8 +132,8 @@ class File {
 			const ext = getExtention( file.path )
 
 			if( ext && extentions.includes( ext ) ){
-				onlyFiles.push( path )
-				log( `- ${path}` )
+				onlyFiles.push( file )
+				log( `- ${file.path}` )
 			}
 		}
 
