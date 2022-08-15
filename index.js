@@ -15,9 +15,9 @@ function renameAsync( oldPath, newPath ){
 	})
 }
 
-function utimesAsync( file ){
+function utimesAsync( path, atime, mtime ){
 	return new Promise( ( resolve, reject ) => {
-		fs.utimes( file.path, file.stat.atime, file.stat.mtime, err => {
+		fs.utimes( path, atime, mtime, err => {
 			if( err )
 				reject( err )
 			else
@@ -81,7 +81,6 @@ class File {
 			this.unaccessable = true
 			return
 		}
-		
 		
 		if( this.stat.isDirectory() )
 			this.isDir = true
@@ -232,8 +231,8 @@ async function nextFile(){
 		if( code !== 0 )
 			return errors.push({ file, error: stderr || 'empty stderr :(' })
 
-		await renameAsync( tempPath, file.path )
-			.then( () => utimesAsync( file )
+		await utimesAsync( tempPath, file.stat.atime, file.stat.mtime )
+			.then( () => renameAsync( tempPath, file.path )
 				.then( () => ++successed )
 			)
 			.catch( error => errors.push({ file, error }) )
