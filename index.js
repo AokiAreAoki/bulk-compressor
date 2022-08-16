@@ -41,6 +41,23 @@ function getExtention( filename ){
 	return null
 }
 
+function prettySize( size ){
+	size /= 8
+	let units = [
+		'B',
+		'KB',
+		'MB',
+		'GB',
+		'TB',
+	]
+	let u = Math.floor( Math.log( size ) / Math.log( 1024 ) )
+	u = u < units.length ? u : units.length
+	let unit = units[u]
+
+	size /= 1024 ** u
+	return size.toFixed(2) + ' ' + unit
+}
+
 let extentions = ['jpg', 'jpeg', 'png']
 
 try {
@@ -50,12 +67,13 @@ try {
 } catch(e) {}
 
 let files = process.argv.slice(2).map( path => path.replace( /\\/g, '/' ) )
+const successedFiles = []
 const unaccessedFiles = []
 const errors = []
 const MAX_CP = 5
 let cpsInWork = []
 
-let successed = 0
+let totalSizeBefore = 0, totalSizeAfter = 0
 let justInCaseInterval
 let progressDisplayInterval
 
@@ -76,7 +94,7 @@ class File {
 
 		try {
 			fs.accessSync( this.path, File.access )
-			this.stat = fs.statSync( this.path )
+			this.updateStat()
 		} catch( err ){
 			this.unaccessable = true
 			return
@@ -84,6 +102,10 @@ class File {
 		
 		if( this.stat.isDirectory() )
 			this.isDir = true
+	}
+
+	updateStat(){
+		this.stat = fs.statSync( this.path )
 	}
 
 	async renameAsync( newPath ){
@@ -132,6 +154,7 @@ class File {
 
 			if( ext && extentions.includes( ext ) ){
 				onlyFiles.push( file )
+				totalSizeBefore += file.stat.size
 				log( `- ${file.path}` )
 			}
 		}
@@ -152,7 +175,7 @@ justInCaseInterval = setInterval( nextFile, 1337 )
 let oldText = ''
 progressDisplayInterval = setInterval( () => {
 	let text = [
-		`Files processed: ${successed}/${amount}`,
+		`Files processed: ${successedFiles.length}/${amount}`,
 	]
 
 	if( unaccessedFiles.length !== 0 )
@@ -231,11 +254,21 @@ async function nextFile(){
 		if( code !== 0 )
 			return errors.push({ file, error: stderr || 'empty stderr :(' })
 
-		await utimesAsync( tempPath, file.stat.atime, file.stat.mtime )
-			.then( () => renameAsync( tempPath, file.path )
-				.then( () => ++successed )
-			)
-			.catch( error => errors.push({ file, error }) )
+		const tempSize = fs.statSync( tempPath ).size
+
+		if( tempSize / file.stat.size > .90 ){
+			fs.unlinkSync( tempPath )
+			successedFiles.push( file )
+			totalSizeAfter += file.stat.size
+		} else
+			await utimesAsync( tempPath, file.stat.atime, file.stat.mtime )
+				.then( () => renameAsync( tempPath, file.path ) )
+				.then( () => {
+					successedFiles.push( file )
+					file.updateStat()
+					totalSizeAfter += file.stat.size
+				})
+				.catch( error => errors.push({ file, error }) )
 
 		cpsInWork = cpsInWork.filter( cp => cp !== ffmpeg )
 		setTimeout( nextFile, 123 * cpsInWork.length )
@@ -249,7 +282,7 @@ function finish(){
 	clearInterval( progressDisplayInterval )
 	console.clear()
 
-	log( `Files processed succesfully: ${successed}/${amount}` )
+	log( `Files processed succesfully: ${successedFiles.length}/${amount}` )
 
 	if( unaccessedFiles.length !== 0 ){
 		log( `Unaccessable files: (${unaccessedFiles.length}):` )
@@ -267,7 +300,19 @@ function finish(){
 			log()
 		})
 	} else
-		log( 'No errors' )
+		log( 'No errors\n' )
+
+	const afterPercent = totalSizeAfter === totalSizeBefore
+		? 0
+		: totalSizeAfter / totalSizeBefore * 100
+
+	log( `Total size before: ${prettySize( totalSizeBefore )} (100.00%)` )
+	log( `Total size after: ${prettySize( totalSizeAfter )} (${afterPercent.toFixed(2)}%)` )
+
+	if( totalSizeBefore === totalSizeAfter )
+		log( `No space have been freed` )
+	else
+		log( `Space freed: ${prettySize( totalSizeBefore - totalSizeAfter )} (${( 100 - afterPercent ).toFixed(2)}%)` )
 
 	process.exit(0)
 }
