@@ -42,7 +42,6 @@ function getExtention( filename ){
 }
 
 function prettySize( size ){
-	size /= 8
 	let units = [
 		'B',
 		'KB',
