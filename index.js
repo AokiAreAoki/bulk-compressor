@@ -2,7 +2,20 @@
 const log = console.log
 const fs = require( 'fs' )
 const cp = require( 'child_process' )
+const YAML = require( 'yaml' )
 const { join } = require( 'path' )
+
+String.prototype.matchFirst = function( re, cb ){
+    let matched = this.match( re )
+
+    if( matched )
+        matched = matched[1] ?? matched[0]
+
+    if( matched && typeof cb === 'function' )
+        cb( matched )
+
+    return matched
+}
 
 function renameAsync( oldPath, newPath ){
 	return new Promise( ( resolve, reject ) => {
@@ -30,12 +43,12 @@ function isNiceName( filename ){
 	return /[^\.\/\\]\.\w+$/.test( filename )
 }
 
-function getExtention( filename ){
+function getExtension( filename ){
 	let start = filename.length
 
 	while( --start >= 0 ){
 		if( filename[start] === '.' )
-			return filename.substring( ++start )
+			return filename.substring( ++start ).toLowerCase()
 	}
 
 	return null
@@ -57,13 +70,9 @@ function prettySize( size ){
 	return size.toFixed(2) + ' ' + unit
 }
 
-let extentions = ['jpg', 'jpeg', 'png']
-
-try {
-	extentions = fs.readFileSync( join( __dirname, '.extentions' ) )
-		.toString()
-		.match( /\w+/g )
-} catch(e) {}
+const extensions = YAML.parse(
+	fs.readFileSync( join( __dirname, 'extensions.yml' ), 'utf-8' )
+)
 
 let files = process.argv.slice(2).map( path => path.replace( /\\/g, '/' ) )
 const successedFiles = []
@@ -87,9 +96,10 @@ class File {
 			? path
 			: new File( path )
 	}
-	
+
 	constructor( path ){
 		this.path = path
+		this.ext = getExtension( path )
 
 		try {
 			fs.accessSync( this.path, File.access )
@@ -98,7 +108,7 @@ class File {
 			this.unaccessable = true
 			return
 		}
-		
+
 		if( this.stat.isDirectory() )
 			this.isDir = true
 	}
@@ -124,9 +134,9 @@ class File {
 			rflag = true
 			continue
 		}
-		
+
 		const file = File.new( path )
-		
+
 		if( !file.isDir && !isNiceName( file.path ) )
 			continue
 
@@ -143,19 +153,15 @@ class File {
 				content.forEach( dir => {
 					if( dir.isDir )
 						files.push( '-r' )
-					
+
 					files.push( dir )
 				})
 			else
 				files.push( ...content.filter( file => fs.statSync( file.path ).isFile() ) )
-		} else {
-			const ext = getExtention( file.path )
-
-			if( ext && extentions.includes( ext ) ){
-				onlyFiles.push( file )
-				totalSizeBefore += file.stat.size
-				log( `- ${file.path}` )
-			}
+		} else if( file.ext && extensions[file.ext] ){
+			onlyFiles.push( file )
+			totalSizeBefore += file.stat.size
+			log( `- ${file.path}` )
 		}
 
 		if( rflag )
@@ -179,10 +185,10 @@ progressDisplayInterval = setInterval( () => {
 
 	if( unaccessedFiles.length !== 0 )
 		text.push( `Files unable to access: ${unaccessedFiles.length}\n` )
-	
+
 	if( errors.length !== 0 ){
 		text.push( `Errors: ${errors.length}\n` )
-		
+
 		const err = errors[errors.length - 1]
 		text.push( 'Last errored file: ' + err.file.path )
 		text.push( 'Error: ' + err.error )
@@ -208,9 +214,12 @@ progressDisplayInterval = setInterval( () => {
 	}
 }, 1000 / 5 )
 
-nextFile()
+const INPUT_RE = /INPUT/
+const INPUT_REG = /INPUT/g
+const OUTPUT_RE = /OUTPUT(\.\w+)?/
+const OUTPUT_REG = /OUTPUT(\.\w+)?/g
 
-async function nextFile(){
+function nextFile(){
 	if( cpsInWork.length >= MAX_CP )
 		return
 
@@ -223,27 +232,28 @@ async function nextFile(){
 		return
 	}
 
-	const jpegNot = file.path.match( /\.(jpeg|png)$/i )
+	const profile = extensions[file.ext]
+	let outputPath = file.path
+	let cmd = profile.cmd
+	const newExt = cmd.matchFirst( OUTPUT_RE )
 
-	if( jpegNot ){
-		const jpegName = file.path.substring( 0, file.path.length - jpegNot[1].length ) + 'jpg'
-		
-		try {
-			await file.renameAsync( jpegName )
-		} catch( error ){
-			return errors.push({ file, error })
-		}
-	}
+	outputPath = outputPath.substring( 0, outputPath.length - newExt.length ) + newExt
+	const tempPath = outputPath.replace( /([^\/\\]+$)/, 'compressed_$1' )
 
-	const tempPath = file.path.replace( /([^\/\\]+$)/, 'compressed_$1' )
-	const ffmpeg = cp.exec( `ffmpeg -i "${file.path}" "${tempPath}" -y` )
+	cmd = cmd.replace( INPUT_REG, file.path )
+	cmd = cmd.replace( OUTPUT_REG, tempPath )
+
+	// console.log( cmd )
+	// process.exit()
+
+	const ffmpeg = cp.exec( cmd )
 	cpsInWork.push( ffmpeg )
 
 	ffmpeg._stdout = ''
 	ffmpeg.stderr.on( 'data', chunk => {
 		ffmpeg._stdout += chunk.toString()
 	})
-	
+
 	let stderr = ''
 	ffmpeg.stderr.on( 'data', chunk => {
 		stderr += chunk.toString()
@@ -255,13 +265,13 @@ async function nextFile(){
 
 		const tempSize = fs.statSync( tempPath ).size
 
-		if( tempSize / file.stat.size > .90 ){
+		if( profile.ilcf && tempSize / file.stat.size > .90 ){
 			fs.unlinkSync( tempPath )
 			successedFiles.push( file )
 			totalSizeAfter += file.stat.size
 		} else
 			await utimesAsync( tempPath, file.stat.atime, file.stat.mtime )
-				.then( () => renameAsync( tempPath, file.path ) )
+				.then( () => renameAsync( tempPath, outputPath ) )
 				.then( () => {
 					successedFiles.push( file )
 					file.updateStat()
@@ -275,6 +285,8 @@ async function nextFile(){
 
 	setTimeout( nextFile, 45 * cpsInWork.length )
 }
+
+nextFile()
 
 function finish(){
 	clearInterval( justInCaseInterval )

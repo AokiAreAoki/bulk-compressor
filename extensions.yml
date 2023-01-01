@@ -1,0 +1,22 @@
+# ilcf - ignore low compressed files
+
+jpg:
+  cmd: &to_jpg ffmpeg -i INPUT OUTPUT.jpg -y
+  ilcf: true
+jpeg:
+  cmd: *to_jpg
+  ilcf: true
+png:
+  cmd: *to_jpg
+  ilcf: true
+
+gif:
+  cmd: &default ffmpeg -i INPUT OUTPUT -y
+  ilcf: true
+
+mp4:
+  cmd: &to_mp4 ffmpeg -i INPUT -c:v h264_nvenc OUTPUT.mp4 -y
+  ilcf: false
+mkv:
+  cmd: *to_mp4
+  ilcf: false
