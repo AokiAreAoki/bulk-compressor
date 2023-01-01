@@ -1,4 +1,3 @@
-
 const log = console.log
 const fs = require( 'fs' )
 const cp = require( 'child_process' )
@@ -253,8 +252,8 @@ function nextFile(){
 	outputPath = outputPath.substring( 0, outputPath.length - newExt.length ) + newExt
 	const tempPath = outputPath.replace( /([^\/\\]+$)/, 'compressed_$1' )
 
-	cmd = cmd.replace( INPUT_REG, file.path )
-	cmd = cmd.replace( OUTPUT_REG, tempPath )
+	cmd = cmd.replace( INPUT_REG, `"${file.path}"` )
+	cmd = cmd.replace( OUTPUT_REG, `"${tempPath}"` )
 
 	// console.log( cmd )
 	// process.exit()
