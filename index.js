@@ -70,9 +70,22 @@ function prettySize( size ){
 	return size.toFixed(2) + ' ' + unit
 }
 
-const extensions = YAML.parse(
-	fs.readFileSync( join( __dirname, 'extensions.yml' ), 'utf-8' )
-)
+const extensionsPath = join( __dirname, 'extensions.yml' )
+let extensions = null
+
+if( fs.existsSync( extensionsPath ) ){
+	extensions = YAML.parse(
+		fs.readFileSync( extensionsPath, 'utf-8' )
+	)
+} else {
+	fs.writeFileSync( extensionsPath, '' )
+}
+
+if( !extensions || Object.keys( extensions ) === 0 ){
+	extensions = YAML.parse(
+		fs.readFileSync( join( __dirname, 'default-extensions.yml' ), 'utf-8' )
+	)
+}
 
 let files = process.argv.slice(2).map( path => path.replace( /\\/g, '/' ) )
 const successedFiles = []

@@ -1,5 +1,6 @@
 .vscode
 node_modules
 test
+extensions.yml
 *.bat
 package-lock.json
