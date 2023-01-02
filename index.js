@@ -87,19 +87,14 @@ if( !extensions || Object.keys( extensions ) === 0 ){
 }
 
 let files = process.argv.slice(2).map( path => path.replace( /\\/g, '/' ) )
-const successedFiles = []
+const succeededFiles = []
 const unaccessedFiles = []
 const errors = []
 const MAX_CP = 5
 let cpsInWork = []
 
 let totalSizeBefore = 0, totalSizeAfter = 0
-let justInCaseInterval
-let progressDisplayInterval
-
-console.clear()
-log( `Validating files existence...` )
-log()
+let justInCaseInterval, progressDisplayInterval
 
 class File {
 	static access = fs.constants.F_OK | fs.constants.R_OK | fs.constants.W_OK
@@ -135,7 +130,11 @@ class File {
 	}
 }
 
-{ // Fetching files
+function fetchFiles(){
+	console.clear()
+	log( `Validating files existence...` )
+	log()
+
 	let rflag = false
 	const onlyFiles = []
 
@@ -181,51 +180,11 @@ class File {
 	}
 
 	files = onlyFiles
+	log()
+	log( `done` )
 }
 
-log()
-log( `done` )
-
 const amount = files.length
-justInCaseInterval = setInterval( nextFile, 1337 )
-
-let oldText = ''
-progressDisplayInterval = setInterval( () => {
-	let text = [
-		`Files processed: ${successedFiles.length}/${amount}`,
-	]
-
-	if( unaccessedFiles.length !== 0 )
-		text.push( `Files unable to access: ${unaccessedFiles.length}\n` )
-
-	if( errors.length !== 0 ){
-		text.push( `Errors: ${errors.length}\n` )
-
-		const err = errors[errors.length - 1]
-		text.push( 'Last errored file: ' + err.file.path )
-		text.push( 'Error: ' + err.error )
-	} else
-		text.push( 'No errors' )
-
-	const cpLogs = cpsInWork
-		.map( cp => cp._stdout.match( /([^\n]+)$/ )?.[1] )
-		.filter( line => !!line )
-		.map( ( lastLine, i ) => `cp #${i + 1}:\n${lastLine || 'no output yet'}` )
-
-	if( cpLogs.length !== 0 ){
-		text.push( '\nLog:' )
-		text.push( ...cpLogs )
-	}
-
-	text = text.join( '\n' )
-
-	if( oldText !== text ){
-		oldText = text
-		console.clear()
-		log( text )
-	}
-}, 1000 / 5 )
-
 const INPUT_RE = /INPUT/
 const INPUT_REG = /INPUT/g
 const OUTPUT_RE = /OUTPUT(\.\w+)?/
@@ -279,17 +238,19 @@ function nextFile(){
 
 		const tempSize = fs.statSync( tempPath ).size
 
-		if( profile.ilcf && tempSize / file.stat.size > .90 ){
+		if( profile.ilcf && tempSize / file.stat.size > .90 && file.ext === outputExt ){
 			fs.unlinkSync( tempPath )
-			successedFiles.push( file )
+			succeededFiles.push( file )
 			totalSizeAfter += file.stat.size
 		} else
 			await utimesAsync( tempPath, file.stat.atime, file.stat.mtime )
 				.then( () => renameAsync( tempPath, outputPath ) )
 				.then( () => {
-					successedFiles.push( file )
-					file.updateStat()
-					totalSizeAfter += file.stat.size
+					succeededFiles.push( file )
+					totalSizeAfter += File.new( outputPath ).stat.size
+
+					if( outputPath !== file.path )
+						fs.unlinkSync( file.path )
 				})
 				.catch( error => errors.push({ file, error }) )
 
@@ -300,14 +261,12 @@ function nextFile(){
 	setTimeout( nextFile, 45 * cpsInWork.length )
 }
 
-nextFile()
-
 function finish(){
 	clearInterval( justInCaseInterval )
 	clearInterval( progressDisplayInterval )
 	console.clear()
 
-	log( `Files processed succesfully: ${successedFiles.length}/${amount}` )
+	log( `Files processed succesfully: ${succeededFiles.length}/${amount}` )
 
 	if( unaccessedFiles.length !== 0 ){
 		log( `Unaccessable files: (${unaccessedFiles.length}):` )
@@ -340,4 +299,50 @@ function finish(){
 		log( `Space freed: ${prettySize( totalSizeBefore - totalSizeAfter )} (${( 100 - afterPercent ).toFixed(2)}%)` )
 
 	process.exit(0)
+}
+
+if( files.length === 0 ){
+	log( `Usage:\n\tnode . [-r] ...<files/directories>` )
+} else {
+	fetchFiles()
+	nextFile()
+
+	justInCaseInterval = setInterval( nextFile, 1337 )
+
+	let prevText = ''
+	progressDisplayInterval = setInterval( () => {
+		let text = [
+			`Files processed: ${succeededFiles.length}/${amount}`,
+		]
+
+		if( unaccessedFiles.length !== 0 )
+			text.push( `Files unable to access: ${unaccessedFiles.length}\n` )
+
+		if( errors.length !== 0 ){
+			text.push( `Errors: ${errors.length}\n` )
+
+			const err = errors[errors.length - 1]
+			text.push( 'Last errored file: ' + err.file.path )
+			text.push( 'Error: ' + err.error )
+		} else
+			text.push( 'No errors' )
+
+		const cpLogs = cpsInWork
+			.map( cp => cp._stdout.match( /([^\n]+)$/ )?.[1] )
+			.filter( line => !!line )
+			.map( ( lastLine, i ) => `cp #${i + 1}:\n${lastLine || 'no output yet'}` )
+
+		if( cpLogs.length !== 0 ){
+			text.push( '\nLog:' )
+			text.push( ...cpLogs )
+		}
+
+		text = text.join( '\n' )
+
+		if( prevText !== text ){
+			prevText = text
+			console.clear()
+			log( text )
+		}
+	}, 1000 / 5 )
 }

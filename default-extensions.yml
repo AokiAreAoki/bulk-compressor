@@ -1,17 +1,17 @@
 # ilcf - ignore low compressed files
 
 jpg:
-  cmd: &to_jpg ffmpeg -i INPUT OUTPUT.jpg -y
+  cmd: &default ffmpeg -i INPUT OUTPUT -y
   ilcf: true
 jpeg:
-  cmd: *to_jpg
+  cmd: *default
   ilcf: true
 png:
-  cmd: *to_jpg
+  cmd: *default
   ilcf: true
 
 gif:
-  cmd: &default ffmpeg -i INPUT OUTPUT -y
+  cmd: *default
   ilcf: true
 
 mp4:
