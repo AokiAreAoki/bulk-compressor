@@ -247,9 +247,11 @@ function nextFile(){
 	const profile = extensions[file.ext]
 	let outputPath = file.path
 	let cmd = profile.cmd
-	const newExt = cmd.matchFirst( OUTPUT_RE )
+	const outputExt = cmd.matchFirst( OUTPUT_RE )
 
-	outputPath = outputPath.substring( 0, outputPath.length - newExt.length ) + newExt
+	if( outputExt )
+		outputPath = outputPath.substring( 0, outputPath.length - outputExt.length ) + outputExt
+
 	const tempPath = outputPath.replace( /([^\/\\]+$)/, 'compressed_$1' )
 
 	cmd = cmd.replace( INPUT_REG, `"${file.path}"` )
