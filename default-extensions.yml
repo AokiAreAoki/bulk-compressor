@@ -15,7 +15,7 @@ gif:
   ilcf: true
 
 mp4:
-  cmd: &to_mp4 ffmpeg -i INPUT -c:v h264_nvenc OUTPUT.mp4 -y
+  cmd: &to_mp4 ffmpeg -i INPUT -c:v h264_nvenc -preset hq OUTPUT.mp4 -y
   ilcf: false
 mkv:
   cmd: *to_mp4
