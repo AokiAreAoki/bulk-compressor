@@ -6,6 +6,8 @@ Bulk Compressor is a simple *in-place* file compressor that uses FFMPEG
 ## Installation
 ```bash
 git clone https://github.com/AokiAreAoki/bulk-compressor.git
+cd bulk-compressor
+npm i
 ```
 
 ## Usage
