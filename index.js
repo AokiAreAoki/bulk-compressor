@@ -3,6 +3,7 @@ const fs = require( 'fs' )
 const cp = require( 'child_process' )
 const YAML = require( 'yaml' )
 const { join } = require( 'path' )
+const pathToFFMPEG = require( 'ffmpeg-static' )
 
 String.prototype.matchFirst = function( re, cb ){
     let matched = this.match( re )
@@ -185,10 +186,10 @@ function fetchFiles(){
 }
 
 const amount = files.length
-const INPUT_RE = /INPUT/
-const INPUT_REG = /INPUT/g
-const OUTPUT_RE = /OUTPUT(\.\w+)?/
-const OUTPUT_REG = /OUTPUT(\.\w+)?/g
+const FFMPEG_RE = /^ffmpeg\b/gi
+const INPUT_RE = /INPUT/g
+const OUTPUT_RE = /OUTPUT(\.\w+)?/g
+const OUTPUT_EXT_RE = /(?:OUTPUT)\.\w+/
 
 function nextFile(){
 	if( cpsInWork.length >= MAX_CP )
@@ -206,15 +207,17 @@ function nextFile(){
 	const profile = extensions[file.ext]
 	let outputPath = file.path
 	let cmd = profile.cmd
-	const outputExt = cmd.matchFirst( OUTPUT_RE )
+	const outputExt = cmd.matchFirst( OUTPUT_EXT_RE )
 
 	if( outputExt )
 		outputPath = outputPath.substring( 0, outputPath.length - outputExt.length ) + outputExt
 
 	const tempPath = outputPath.replace( /([^\/\\]+$)/, 'compressed_$1' )
 
-	cmd = cmd.replace( INPUT_REG, `"${file.path}"` )
-	cmd = cmd.replace( OUTPUT_REG, `"${tempPath}"` )
+	cmd = cmd
+		.replace( FFMPEG_RE, `"${pathToFFMPEG}"` )
+		.replace( INPUT_RE, `"${file.path}"` )
+		.replace( OUTPUT_RE, `"${tempPath}"` )
 
 	// console.log( cmd )
 	// process.exit()

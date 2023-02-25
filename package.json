@@ -27,6 +27,7 @@
  },
  "homepage": "https://github.com/AokiAreAoki/bulk-compressor#readme",
  "dependencies": {
+  "ffmpeg-static": "^5.1.0",
   "yaml": "^2.2.1"
  }
 }
