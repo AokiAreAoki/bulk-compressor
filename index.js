@@ -189,7 +189,8 @@ const amount = files.length
 const FFMPEG_RE = /^ffmpeg\b/gi
 const INPUT_RE = /INPUT/g
 const OUTPUT_RE = /OUTPUT(\.\w+)?/g
-const OUTPUT_EXT_RE = /(?:OUTPUT)\.\w+/
+const OUTPUT_EXT_RE = /(?:OUTPUT)\.(\w+)/
+const EXT_RE = /\.(\w+)$/
 
 function nextFile(){
 	if( cpsInWork.length >= MAX_CP )
@@ -210,7 +211,7 @@ function nextFile(){
 	const outputExt = cmd.matchFirst( OUTPUT_EXT_RE )
 
 	if( outputExt )
-		outputPath = outputPath.substring( 0, outputPath.length - outputExt.length ) + outputExt
+		outputPath = outputPath.replace( EXT_RE, '.' + outputExt )
 
 	const tempPath = outputPath.replace( /([^\/\\]+$)/, 'compressed_$1' )
 
